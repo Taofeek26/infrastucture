@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  lbb
+
+  Sample SAM Template for lbb
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    MemorySize: 128
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+
+Resources:
+  LBBApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: LLB Api Gateway
+      StageName: Staging
+
+  AuthenticationsFunctions:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: authentication/
+      Handler: authentication.lambda_handler
+      Runtime: python3.8
+      Architectures:
+        - x86_64
+      Events:
+        HelloWorldApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LBBApiGateway
+            Path: /auth_
+            Method: GET
+      Timeout: 3
+      MemorySize: 128
+      FunctionName: !Sub ${Environment}-authentications-test # TODO replace myFunctionName with actual Function Name
+      Environment:
+        Variables:
+          ConfigBucket: !Sub ${Environment}-authentications-test
+      Policies:
+        - AmazonS3FullAccess
+        - AmazonAthenaFullAccess
+
+  ActionsFunctions:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: action/
+      Handler: action.lambda_handler
+      Runtime: python3.8
+      Architectures:
+        - x86_64
+      Events:
+        HelloWorldApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref LBBApiGateway
+            Path: /action
+            Method: GET
+      Timeout: 3
+      MemorySize: 128
+      FunctionName: !Sub ${Environment}-actions-test # TODO replace myFunctionName with actual Function Name
+      Environment:
+        Variables:
+          ConfigBucket: !Sub ${Environment}-actions-test
+      Policies:
+        - AmazonS3FullAccess
+        - AmazonAthenaFullAccess
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name:
+        Fn::Sub: ApplicationInsights-SAM-${AWS::StackName}
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Ref: ApplicationResourceGroup
+      AutoConfigurationEnabled: "true"
+
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: lbb-table
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
